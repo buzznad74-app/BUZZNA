@@ -522,6 +522,15 @@ async function startServer() {
     }
   });
 
+  // Standalone Offline License Key Generator HTML Page Route
+  app.get("/activation-generator.html", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "offline_activation_generator.html"));
+  });
+
+  app.get("/offline-generator", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "offline_activation_generator.html"));
+  });
+
   // Vite integration middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

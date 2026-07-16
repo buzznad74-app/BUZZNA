@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzNa D74 - Offline License Key Generator</title>
+    <!-- Tailwind CDN for premium styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #09090b;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+<body class="text-zinc-100 min-h-screen flex items-center justify-center p-4 selection:bg-indigo-500/30">
+    <div class="max-w-xl w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl space-y-8 relative overflow-hidden">
+        
+        <!-- Decorative subtle background glow -->
+        <div class="absolute -top-16 -right-16 w-32 h-32 bg-indigo-600/10 rounded-full blur-3xl"></div>
+        <div class="absolute -bottom-16 -left-16 w-32 h-32 bg-emerald-600/10 rounded-full blur-3xl"></div>
+
+        <!-- Header -->
+        <div class="space-y-2 text-center">
+            <span class="px-3 py-1 bg-indigo-950 text-indigo-400 text-[10px] font-bold tracking-widest uppercase rounded-full border border-indigo-900/60 inline-block">
+                SaaS Offline Failsafe System
+            </span>
+            <h1 class="text-2xl font-black text-white uppercase tracking-tight">BuzzNa D74 License Generator</h1>
+            <p class="text-xs text-zinc-400 max-w-sm mx-auto">
+                Generate air-gapped activation signatures for off-grid municipal POS terminals with zero internet access.
+            </p>
+        </div>
+
+        <!-- Generator Controls -->
+        <div class="space-y-5">
+            <div class="space-y-2">
+                <label class="block text-xs font-bold uppercase text-zinc-400">Legal Business Name</label>
+                <input 
+                    type="text" 
+                    id="legal-name" 
+                    placeholder="e.g., Kijiji Traders Ltd" 
+                    class="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-semibold"
+                    oninput="generateKey()"
+                >
+                <p class="text-[10px] text-zinc-500">
+                    Must EXACTLY match the "Legal Business Name" entered in your BuzzNa D74 terminal Settings page.
+                </p>
+            </div>
+
+            <!-- Output Container -->
+            <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold uppercase text-zinc-400">Cryptographic Signature</span>
+                    <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Offline Generated
+                    </span>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <div id="output-key" class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-center font-mono font-bold text-indigo-400 select-all tracking-wider text-sm">
+                        ENTER BUSINESS NAME ABOVE
+                    </div>
+                    <button 
+                        onclick="copyKey()" 
+                        class="px-4 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                    >
+                        Copy
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Verification Flow Helper -->
+        <div class="bg-indigo-950/20 border border-indigo-900/40 rounded-2xl p-5 space-y-3">
+            <h4 class="text-xs font-bold text-indigo-300 uppercase">How to Activate Offline:</h4>
+            <ol class="text-[11px] text-zinc-400 list-decimal pl-4 space-y-1.5">
+                <li>Input your <b>Legal Business Name</b> in the field above.</li>
+                <li>Copy the generated <b>Cryptographic Signature</b> key.</li>
+                <li>Go to <b>BuzzNa D74 &gt; Settings &gt; Billing & License</b> in your terminal.</li>
+                <li>Toggle the <b>Manual Offline Activation Key</b> field, paste the key, and click <b>Activate</b>.</li>
+                <li>The system will instantly unlock all features, bypass internet requirements, and activate a full 1-year annual enterprise license!</li>
+            </ol>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-[10px] text-zinc-500 border-t border-zinc-800/60 pt-4 font-mono">
+            BuzzNa D74 Terminal Failsafe &copy; 2026. Designed for offline resilience.
+        </div>
+    </div>
+
+    <!-- Script Section -->
+    <script>
+        const SALT_1 = "BUZZNA_OFFLINE_SECURE_SALT_2026_D74_KEY_8829";
+        const SALT_2 = "AIR_GAPPED_MUNICIPAL_TERMINAL_VERIFIER_1109";
+
+        function hashToSegment(input, salt, multiplier) {
+            const combined = input + salt;
+            let h1 = 0x811c9dc5;
+            let h2 = 0x12345678;
+            
+            for (let i = 0; i < combined.length; i++) {
+                h1 = Math.imul(h1 ^ combined.charCodeAt(i), multiplier);
+                h2 = Math.imul(h2 ^ combined.charCodeAt(i), 0x5bd1e995);
+            }
+            
+            const combinedHash = Math.abs(h1 ^ h2);
+            const code = combinedHash.toString(36).toUpperCase();
+            const pad = "KJZ74BZN99OFFLINEPROSYSTEM";
+            
+            return (code + pad).substring(0, 5);
+        }
+
+        function generateOfflineKey(legalName) {
+            const clean = legalName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+            if (!clean) return '';
+
+            // Segment 1: Encodes base business name using SALT_1
+            const s1 = hashToSegment(clean, SALT_1, 0x5bd1e995);
+            
+            // Segment 2: Encodes base business name using SALT_2
+            const s2 = hashToSegment(clean, SALT_2, 0x15715433);
+            
+            // Segment 3: Length-tied verification block
+            const lengthSalt = `len:${clean.length}:${clean.charAt(0)}:${clean.charAt(clean.length - 1)}`;
+            const s3 = hashToSegment(lengthSalt, SALT_1, 0x241577);
+            
+            // Segment 4: Checksum of segments 1, 2, and 3
+            const s4 = hashToSegment(s1 + s2 + s3, SALT_2, 0x9e3779b9);
+            
+            // Segment 5: Business-owner vertical tier lock signature
+            const tierSalt = `enterprise:annual:d74:buzzna`;
+            const s5 = hashToSegment(clean + tierSalt, SALT_1 + SALT_2, 0x11091988);
+
+            return `BZN74-${s1}-${s2}-${s3}-${s4}-${s5}`;
+        }
+
+        function generateKey() {
+            const nameInput = document.getElementById('legal-name').value;
+            const outputDiv = document.getElementById('output-key');
+            
+            if (!nameInput.trim()) {
+                outputDiv.innerText = 'ENTER BUSINESS NAME ABOVE';
+                outputDiv.classList.add('text-zinc-500');
+                outputDiv.classList.remove('text-indigo-400');
+                return;
+            }
+
+            const key = generateOfflineKey(nameInput);
+            outputDiv.innerText = key;
+            outputDiv.classList.remove('text-zinc-500');
+            outputDiv.classList.add('text-indigo-400');
+        }
+
+        function copyKey() {
+            const outputDiv = document.getElementById('output-key');
+            const text = outputDiv.innerText;
+            if (text === 'ENTER BUSINESS NAME ABOVE' || !text) return;
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert('License Activation Key copied to clipboard!');
+            }).catch(err => {
+                console.error('Could not copy text: ', err);
+            });
+        }
+    </script>
+</body>
+</html>

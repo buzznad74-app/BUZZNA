@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db, generateUUID } from '../lib/db';
 import { User, VerticalTheme } from '../types';
 import { Save, UserPlus, KeyRound, Palette, Sparkles, CreditCard, MailOpen, HelpCircle } from 'lucide-react';
+import { validateOfflineKey } from '../lib/license';
 
 export const Settings: React.FC<{ addToast: (text: string, type: 'success' | 'error' | 'info' | 'sync') => void }> = ({ addToast }) => {
   const { activeBusiness, businessSettings, updateSettings, setThemeAndColor, allUsers, activeUser, updateBusiness, language, setLanguage, t } = useAuth();
@@ -36,6 +37,7 @@ export const Settings: React.FC<{ addToast: (text: string, type: 'success' | 'er
   const [billingEmail, setBillingEmail] = useState(activeUser?.emailAddress || '');
   const [isInitializingPayment, setIsInitializingPayment] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [offlineKey, setOfflineKey] = useState('');
 
   // Verify Paystack payment on mount/redirect
   React.useEffect(() => {
@@ -197,6 +199,28 @@ export const Settings: React.FC<{ addToast: (text: string, type: 'success' | 'er
       addToast(err.message || 'Paystack handshake failed.', 'error');
     } finally {
       setIsInitializingPayment(false);
+    }
+  };
+
+  const handleOfflineActivate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBusiness) return;
+    
+    if (!offlineKey.trim()) {
+      addToast('Please enter an offline activation key.', 'error');
+      return;
+    }
+
+    const isValid = validateOfflineKey(activeBusiness.legalName, offlineKey);
+    if (isValid) {
+      await updateBusiness({
+        licenseStatus: 'FULLY_ACTIVATED' as any,
+        licenseExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year
+      });
+      addToast('Congratulations! Offline license verification successful. System unlocked!', 'success');
+      setOfflineKey('');
+    } else {
+      addToast('Invalid offline activation key signature for this business legal name.', 'error');
     }
   };
 
@@ -664,6 +688,52 @@ export const Settings: React.FC<{ addToast: (text: string, type: 'success' | 'er
                             <span>Activate Annual License</span>
                           </>
                         )}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Offline Failsafe Activation Segment */}
+                  <div className="bg-amber-50/45 dark:bg-amber-950/10 p-6 rounded-3xl border border-amber-200/50 dark:border-amber-900/40 flex flex-col md:flex-row md:items-center justify-between gap-8 mt-6">
+                    <div className="space-y-2 max-w-md">
+                      <span className="text-[10px] font-mono font-bold uppercase text-amber-600 dark:text-amber-400 tracking-wider">Offline Resilience Failsafe</span>
+                      <h4 className="font-extrabold text-zinc-900 dark:text-white text-base">Manual Offline Activation</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">
+                        Operating entirely offline? You can activate your SaaS license with zero municipal network connection using a cryptographic signature matching your business legal name.
+                      </p>
+                      <div className="pt-2">
+                        <a 
+                          href="/activation-generator.html" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                        >
+                          <span>Open Standalone Offline License Generator</span>
+                          <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-900">NEW WINDOW</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleOfflineActivate} className="space-y-4 max-w-sm w-full bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800/60 shadow-sm">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold uppercase text-zinc-500 dark:text-zinc-400">Offline Activation Key</label>
+                        <input
+                          type="text"
+                          required
+                          value={offlineKey}
+                          onChange={(e) => setOfflineKey(e.target.value)}
+                          placeholder="BZN74-XXXXXX-XXXX-XXXX"
+                          className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 text-xs font-mono focus:ring-2 focus:ring-amber-500/20 focus:outline-none uppercase tracking-wider text-amber-600 dark:text-amber-400"
+                        />
+                        <p className="text-[10px] text-zinc-400">Generated for "<b>{activeBusiness?.legalName}</b>"</p>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2 transition-all"
+                        style={{ minHeight: '44px' }}
+                      >
+                        <KeyRound className="w-4 h-4" />
+                        <span>Verify & Activate License</span>
                       </button>
                     </form>
                   </div>
