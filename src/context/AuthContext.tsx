@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Business, BusinessSettings, User, VerticalTheme, LicenseStatus } from '../types';
 import { db, generateUUID } from '../lib/db';
 import { translate } from '../lib/translations';
+import { supabase } from '../lib/sync'; // <-- Added Supabase Import
 
 interface AuthContextType {
   activeBusiness: Business | null;
@@ -205,24 +206,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       password: details.password
     };
 
-    // Trigger full-stack onboarding to register business, settings, owner, and send Brevo transactional emails!
-    const res = await fetch("/api/register-onboarding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        business: newBusiness,
-        settings: newSettings,
-        owner: newOwner,
-        password: details.password
-      })
-    });
+    // DIRECT SUPABASE INTEGRATION (Replaces the broken /api/register-onboarding fetch call)
+    
+    const { error: bizError } = await supabase.from('businesses').insert([newBusiness]);
+    if (bizError) throw new Error(bizError.message || "Failed to initialize business in Cloud.");
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || "Failed to initialize Cloud OS database backend.");
-    }
+    const { error: settingsError } = await supabase.from('business_settings').insert([newSettings]);
+    if (settingsError) throw new Error(settingsError.message || "Failed to initialize settings in Cloud.");
 
-    // Commit to local DB
+    const { error: ownerError } = await supabase.from('users').insert([newOwner]);
+    if (ownerError) throw new Error(ownerError.message || "Failed to initialize owner in Cloud.");
+
+    // Commit to local DB (Offline fallback & instantaneous UI)
     await db.put('businesses', newBusiness);
     await db.put('business_settings', newSettings);
     await db.put('users', newOwner);
