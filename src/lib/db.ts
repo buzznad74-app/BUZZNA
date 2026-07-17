@@ -18,6 +18,7 @@ import {
   PaymentMethod,
   PaymentAllocation
 } from '../types';
+import { supabase } from './sync';
 
 // Helper to generate UUIDs
 export function generateUUID(): string {
@@ -161,14 +162,35 @@ class AppDatabase {
 
     this.notifyListeners();
 
-    // Background push to Supabase via server-side proxy
+    // Background push to Supabase via direct client (no server proxy)
     if (storeName !== 'sync_queue') {
       try {
-        fetch(`/api/db/${storeName}/upsert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ item })
-        }).catch(err => console.warn(`Supabase sync failed for ${storeName}:`, err));
+        const itemAny = item as any;
+        const id = String(
+          itemAny.tenantId ||
+          itemAny.productId ||
+          itemAny.categoryId ||
+          itemAny.userId ||
+          itemAny.customerId ||
+          itemAny.transactionId ||
+          itemAny.itemId ||
+          itemAny.expenseId ||
+          itemAny.sessionId ||
+          itemAny.ledgerId ||
+          `local_${Date.now()}`
+        );
+        const tenantId = itemAny.tenantId || null;
+
+        supabase
+          .from('buzzna_records')
+          .upsert({
+            id,
+            table_name: storeName,
+            tenant_id: tenantId ? String(tenantId) : null,
+            data: item,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' })
+          .catch(err => console.warn(`Supabase sync failed for ${storeName}:`, err));
       } catch (e) {
         console.warn(e);
       }
@@ -185,12 +207,15 @@ class AppDatabase {
 
     this.notifyListeners();
 
-    // Background deletion in Supabase via server-side proxy
+    // Background deletion in Supabase via direct client (no server proxy)
     if (storeName !== 'sync_queue') {
       try {
-        fetch(`/api/db/${storeName}/${id}`, {
-          method: 'DELETE'
-        }).catch(err => console.warn(`Supabase delete sync failed for ${storeName}:`, err));
+        supabase
+          .from('buzzna_records')
+          .delete()
+          .eq('id', id)
+          .eq('table_name', storeName)
+          .catch(err => console.warn(`Supabase delete sync failed for ${storeName}:`, err));
       } catch (e) {
         console.warn(e);
       }
@@ -202,17 +227,19 @@ class AppDatabase {
     await new Promise<void>((resolve, reject) => {
       const request = store.clear();
       request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      request.onerror = () => rej(req.error);
     });
 
     this.notifyListeners();
 
-    // Background clear in Supabase via server-side proxy
+    // Background clear in Supabase via direct client (no server proxy)
     if (storeName !== 'sync_queue') {
       try {
-        fetch(`/api/db/${storeName}/clear`, {
-          method: 'POST'
-        }).catch(err => console.warn(`Supabase clear sync failed for ${storeName}:`, err));
+        supabase
+          .from('buzzna_records')
+          .delete()
+          .eq('table_name', storeName)
+          .catch(err => console.warn(`Supabase clear sync failed for ${storeName}:`, err));
       } catch (e) {
         console.warn(e);
       }
@@ -238,9 +265,18 @@ class AppDatabase {
 
     try {
       for (const store of syncStores) {
-        const response = await fetch(`/api/db/${store}`);
-        if (response.ok) {
-          const items = await response.json();
+        try {
+          const { data, error } = await supabase
+            .from('buzzna_records')
+            .select('data')
+            .eq('table_name', store);
+
+          if (error) {
+            console.warn(`Supabase query error for ${store}:`, error);
+            continue;
+          }
+
+          const items = (data || []).map((row: any) => row.data);
           if (Array.isArray(items) && items.length > 0) {
             const localStore = await this.getStore(store, 'readwrite');
             
@@ -260,6 +296,8 @@ class AppDatabase {
               });
             }
           }
+        } catch (storeErr) {
+          console.warn(`Error syncing store ${store}:`, storeErr);
         }
       }
       this.notifyListeners();
