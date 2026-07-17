@@ -1,6 +1,4 @@
-import { db } from './db';
-// IMPORTANT: Adjust this import to match where your Supabase client instance is initialized
-import { supabase } from './supabaseClient'; 
+import { db, supabase } from './db';
 import { SyncQueueItem } from '../types';
 
 /**
