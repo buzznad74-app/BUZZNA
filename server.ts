@@ -41,7 +41,7 @@ async function startServer() {
     console.log(`  ℹ ${key}: ${value ? "✅ Configured" : "⚠️  Not configured (some features disabled)"}`);
   });
 
-  // Initialize Supabase Client (Lazy-loaded to avoid startup crashes if keys are not configured)
+  // Initialize Supabase Client for server-side operations (onboarding, billing, AI)
   const supabaseUrl = process.env.SUPABASE_URL || "";
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || "";
   let supabase: any = null;
@@ -49,7 +49,7 @@ async function startServer() {
   function getSupabaseClient() {
     if (!supabase) {
       if (!supabaseUrl || !supabaseKey) {
-        console.warn("[Supabase] Credentials not configured. Database operations will operate locally only.");
+        console.warn("[Supabase] Credentials not configured. Server-side operations will be limited.");
         return null;
       }
       try {
@@ -58,7 +58,7 @@ async function startServer() {
             persistSession: false
           }
         });
-        console.log("[Supabase] Client initialized successfully.");
+        console.log("[Supabase] Client initialized successfully for server operations.");
       } catch (e) {
         console.error("[Supabase] Failed to initialize client:", e);
       }
@@ -67,359 +67,21 @@ async function startServer() {
   }
 
   // ============================================
-  // DATABASE PROXY ENDPOINTS
+  // ⚠️  DATABASE PROXY ENDPOINTS REMOVED
   // ============================================
-  app.post("/api/db/:table/upsert", async (req, res) => {
-    try {
-      const { table } = req.params;
-      const { item } = req.body;
-
-      if (!item) {
-        return res.status(400).json({ error: "Missing required item payload." });
-      }
-
-      const client = getSupabaseClient();
-      if (!client) {
-        return res.json({ success: true, localOnly: true, message: "Data stored locally (offline mode)" });
-      }
-
-      // Determine standard ID from item properties
-      const id = String(
-        item.tenantId ||
-        item.productId ||
-        item.categoryId ||
-        item.userId ||
-        item.customerId ||
-        item.transactionId ||
-        item.itemId ||
-        item.expenseId ||
-        item.sessionId ||
-        item.ledgerId ||
-        `local_${Date.now()}`
-      );
-      const tenantId = item.tenantId || null;
-
-      const { error } = await client
-        .from("buzzna_records")
-        .upsert({
-          id,
-          table_name: table,
-          tenant_id: tenantId ? String(tenantId) : null,
-          data: item,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
-
-      if (error) {
-        console.error(`[Database] Upsert Error for ${table}:`, error);
-        return res.status(500).json({ error: error.message });
-      }
-
-      res.json({ success: true, id });
-    } catch (err: any) {
-      console.error("[Database] Upsert Exception:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/:table", async (req, res) => {
-    try {
-      const { table } = req.params;
-
-      const client = getSupabaseClient();
-      if (!client) {
-        return res.json([]);
-      }
-
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", table);
-
-      if (error) {
-        console.error(`[Database] Get Error for ${table}:`, error);
-        return res.status(500).json({ error: error.message });
-      }
-
-      const items = (data || []).map((row: any) => row.data);
-      res.json(items);
-    } catch (err: any) {
-      console.error("[Database] Get Exception:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // ============================================
-  // SPECIALIZED TABLE ENDPOINTS (Direct Access)
-  // ============================================
-  
-  app.get("/api/db/businesses", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "businesses");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Businesses GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/business_settings", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "business_settings");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Business Settings GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/users", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "users");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Users GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/product_categories", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "product_categories");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Product Categories GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/products", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "products");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Products GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/inventory_events", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "inventory_events");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Inventory Events GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/till_sessions", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "till_sessions");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Till Sessions GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/sales_transactions", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "sales_transactions");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Sales Transactions GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/sale_items", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "sale_items");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Sale Items GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/customers", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "customers");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Customers GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/customer_credit_ledger", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "customer_credit_ledger");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Customer Credit Ledger GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/db/expenses", async (req, res) => {
-    try {
-      const client = getSupabaseClient();
-      if (!client) return res.json([]);
-      
-      const { data, error } = await client
-        .from("buzzna_records")
-        .select("data")
-        .eq("table_name", "expenses");
-      
-      if (error) throw new Error(error.message);
-      res.json((data || []).map((row: any) => row.data));
-    } catch (err: any) {
-      console.error("[Database] Expenses GET Error:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.delete("/api/db/:table/:id", async (req, res) => {
-    try {
-      const { table, id } = req.params;
-
-      const client = getSupabaseClient();
-      if (!client) {
-        return res.json({ success: true, localOnly: true });
-      }
-
-      const { error } = await client
-        .from("buzzna_records")
-        .delete()
-        .eq("id", id)
-        .eq("table_name", table);
-
-      if (error) {
-        console.error(`[Database] Delete Error for ${table}:`, error);
-        return res.status(500).json({ error: error.message });
-      }
-
-      res.json({ success: true });
-    } catch (err: any) {
-      console.error("[Database] Delete Exception:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/db/:table/clear", async (req, res) => {
-    try {
-      const { table } = req.params;
-
-      const client = getSupabaseClient();
-      if (!client) {
-        return res.json({ success: true, localOnly: true });
-      }
-
-      const { error } = await client
-        .from("buzzna_records")
-        .delete()
-        .eq("table_name", table);
-
-      if (error) {
-        console.error(`[Database] Clear Error for ${table}:`, error);
-        return res.status(500).json({ error: error.message });
-      }
-
-      res.json({ success: true });
-    } catch (err: any) {
-      console.error("[Database] Clear Exception:", err);
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // MIGRATION COMPLETE: All /api/db/* endpoints have been removed.
+  // Clients now call Supabase directly via ANON_KEY from their IndexedDB wrapper.
+  // This eliminates 404 errors on Vercel and improves performance.
+  //
+  // Previously removed endpoints:
+  // - POST /api/db/:table/upsert
+  // - GET /api/db/:table
+  // - DELETE /api/db/:table/:id
+  // - POST /api/db/:table/clear
+  // - GET /api/db/[businesses|customers|products|...]
+  //
+  // Clients use: import { supabase } from '@/lib/sync';
+  // Direct calls: supabase.from('table_name').select('*')
 
   // ============================================
   // BUSINESS ONBOARDING WITH EMAIL INTEGRATION
@@ -497,7 +159,7 @@ async function startServer() {
                 </ul>
               </div>
 
-              <p style="font-size: 13px; line-height: 1.5; color: #71717a;">If you have any questions, our dedicated merchant success desk is available 24/7 on WhatsApp at <b>+254790435584</b>.</[...]
+              <p style="font-size: 13px; line-height: 1.5; color: #71717a;">If you have any questions, our dedicated merchant success desk is available 24/7 on WhatsApp at <b>+254790435584</b>.[...]
               <p style="margin-top: 32px; font-size: 13px; color: #71717a; border-top: 1px solid #f4f4f5; padding-top: 16px;">Warm regards,<br/>The BuzzNa Onboarding Team</p>
             </div>
           `;
@@ -821,7 +483,10 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`\n🚀 [BuzzNa D74 Server] Running on http://0.0.0.0:${PORT}`);
     console.log(`📊 NODE_ENV: ${process.env.NODE_ENV || "development"}`);
-    console.log(`🔒 Supabase: ${supabaseUrl ? "✅" : "❌"}\n`);
+    console.log(`🔒 Supabase: ${supabaseUrl ? "✅" : "❌"}
+`);
+    console.log(`ℹ️  Database proxy endpoints (/api/db/*) have been removed.`);
+    console.log(`    Clients now use direct Supabase queries for better performance.\n`);
   });
 }
 
