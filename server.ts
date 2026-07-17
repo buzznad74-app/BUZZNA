@@ -148,6 +148,226 @@ async function startServer() {
     }
   });
 
+  // ============================================
+  // SPECIALIZED TABLE ENDPOINTS (Direct Access)
+  // ============================================
+  
+  app.get("/api/db/businesses", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "businesses");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Businesses GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/business_settings", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "business_settings");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Business Settings GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/users", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "users");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Users GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/product_categories", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "product_categories");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Product Categories GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/products", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "products");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Products GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/inventory_events", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "inventory_events");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Inventory Events GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/till_sessions", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "till_sessions");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Till Sessions GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/sales_transactions", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "sales_transactions");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Sales Transactions GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/sale_items", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "sale_items");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Sale Items GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/customers", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "customers");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Customers GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/customer_credit_ledger", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "customer_credit_ledger");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Customer Credit Ledger GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/db/expenses", async (req, res) => {
+    try {
+      const client = getSupabaseClient();
+      if (!client) return res.json([]);
+      
+      const { data, error } = await client
+        .from("buzzna_records")
+        .select("data")
+        .eq("table_name", "expenses");
+      
+      if (error) throw new Error(error.message);
+      res.json((data || []).map((row: any) => row.data));
+    } catch (err: any) {
+      console.error("[Database] Expenses GET Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.delete("/api/db/:table/:id", async (req, res) => {
     try {
       const { table, id } = req.params;
@@ -264,8 +484,8 @@ async function startServer() {
               </div>
               <hr style="border: 0; border-top: 1px solid #f4f4f5; margin-bottom: 24px;" />
               <p style="font-size: 15px; line-height: 1.5;">Dear <strong>${owner.username}</strong>,</p>
-              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Welcome to <strong>BuzzNa D74 Cloud OS</strong>! We are absolutely thrilled to partner with you to power and streamline your business operations.</p>
-              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Your 14-day premium enterprise trial has been successfully provisioned. You now have full administrative access to our unlimited feature set.</p>
+              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Welcome to <strong>BuzzNa D74 Cloud OS</strong>! We are absolutely thrilled to partner with you to power and streamline[...]
+              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Your 14-day premium enterprise trial has been successfully provisioned. You now have full administrative access to our [...]
               
               <div style="background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px; padding: 18px; margin: 24px 0;">
                 <h3 style="color: #5b21b6; margin: 0 0 8px 0; font-size: 13px; text-transform: uppercase; font-weight: 700;">Next Steps to Launch:</h3>
@@ -277,7 +497,7 @@ async function startServer() {
                 </ul>
               </div>
 
-              <p style="font-size: 13px; line-height: 1.5; color: #71717a;">If you have any questions, our dedicated merchant success desk is available 24/7 on WhatsApp at <b>+254790435584</b>.</p>
+              <p style="font-size: 13px; line-height: 1.5; color: #71717a;">If you have any questions, our dedicated merchant success desk is available 24/7 on WhatsApp at <b>+254790435584</b>.</[...]
               <p style="margin-top: 32px; font-size: 13px; color: #71717a; border-top: 1px solid #f4f4f5; padding-top: 16px;">Warm regards,<br/>The BuzzNa Onboarding Team</p>
             </div>
           `;
@@ -306,7 +526,7 @@ async function startServer() {
               </div>
               <hr style="border: 0; border-top: 1px solid #f4f4f5; margin-bottom: 24px;" />
               <p style="font-size: 15px; line-height: 1.5;">Hello <strong>${owner.username}</strong>,</p>
-              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">This email confirms that your business entity registration on BuzzNa D74 is fully processed and secured in our cloud storage infrastructure.</p>
+              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">This email confirms that your business entity registration on BuzzNa D74 is fully processed and secured in our cloud st[...]
               
               <table style="width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 13px;">
                 <thead>
