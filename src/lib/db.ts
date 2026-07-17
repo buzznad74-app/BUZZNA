@@ -164,7 +164,7 @@ class AppDatabase {
     // Background push to Supabase via server-side proxy
     if (storeName !== 'sync_queue') {
       try {
-        fetch(`/lib/db/${storeName}/upsert`, {
+        fetch(`/api/db/${storeName}/upsert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ item })
@@ -188,7 +188,7 @@ class AppDatabase {
     // Background deletion in Supabase via server-side proxy
     if (storeName !== 'sync_queue') {
       try {
-        fetch(`/lib/db/${storeName}/${id}`, {
+        fetch(`/api/db/${storeName}/${id}`, {
           method: 'DELETE'
         }).catch(err => console.warn(`Supabase delete sync failed for ${storeName}:`, err));
       } catch (e) {
@@ -210,7 +210,7 @@ class AppDatabase {
     // Background clear in Supabase via server-side proxy
     if (storeName !== 'sync_queue') {
       try {
-        fetch(`/lib/db/${storeName}/clear`, {
+        fetch(`/api/db/${storeName}/clear`, {
           method: 'POST'
         }).catch(err => console.warn(`Supabase clear sync failed for ${storeName}:`, err));
       } catch (e) {
@@ -238,7 +238,7 @@ class AppDatabase {
 
     try {
       for (const store of syncStores) {
-        const response = await fetch(`/lib/db/${store}`);
+        const response = await fetch(`/api/db/${store}`);
         if (response.ok) {
           const items = await response.json();
           if (Array.isArray(items) && items.length > 0) {
