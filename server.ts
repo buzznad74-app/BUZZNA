@@ -13,9 +13,33 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
+
+  // ============================================
+  // ENVIRONMENT VARIABLE VALIDATION
+  // ============================================
+  const requiredEnvVars = {
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
+
+  const optionalEnvVars = {
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    BREVO_API_KEY: process.env.BREVO_API_KEY,
+    PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
+  };
+
+  // Log configuration status
+  console.log("[BuzzNa D74 Server] Environment Configuration Status:");
+  Object.entries(requiredEnvVars).forEach(([key, value]) => {
+    console.log(`  ✓ ${key}: ${value ? "✅ Configured" : "❌ MISSING"}`);
+  });
+  Object.entries(optionalEnvVars).forEach(([key, value]) => {
+    console.log(`  ℹ ${key}: ${value ? "✅ Configured" : "⚠️  Not configured (some features disabled)"}`);
+  });
 
   // Initialize Supabase Client (Lazy-loaded to avoid startup crashes if keys are not configured)
   const supabaseUrl = process.env.SUPABASE_URL || "";
@@ -25,7 +49,7 @@ async function startServer() {
   function getSupabaseClient() {
     if (!supabase) {
       if (!supabaseUrl || !supabaseKey) {
-        console.warn("Supabase credentials not configured in environment variables. Database proxy endpoints will operate locally.");
+        console.warn("[Supabase] Credentials not configured. Database operations will operate locally only.");
         return null;
       }
       try {
@@ -34,14 +58,17 @@ async function startServer() {
             persistSession: false
           }
         });
+        console.log("[Supabase] Client initialized successfully.");
       } catch (e) {
-        console.error("Failed to initialize Supabase client:", e);
+        console.error("[Supabase] Failed to initialize client:", e);
       }
     }
     return supabase;
   }
 
-  // Supabase proxy endpoints
+  // ============================================
+  // DATABASE PROXY ENDPOINTS
+  // ============================================
   app.post("/api/db/:table/upsert", async (req, res) => {
     try {
       const { table } = req.params;
@@ -53,11 +80,23 @@ async function startServer() {
 
       const client = getSupabaseClient();
       if (!client) {
-        return res.json({ success: true, localOnly: true });
+        return res.json({ success: true, localOnly: true, message: "Data stored locally (offline mode)" });
       }
 
-      // Determine standard ID
-      const id = String(item.tenantId || item.productId || item.categoryId || item.userId || item.customerId || item.transactionId || item.itemId || item.expenseId || item.sessionId || item.ledgerId || item.queueId || item.id);
+      // Determine standard ID from item properties
+      const id = String(
+        item.tenantId ||
+        item.productId ||
+        item.categoryId ||
+        item.userId ||
+        item.customerId ||
+        item.transactionId ||
+        item.itemId ||
+        item.expenseId ||
+        item.sessionId ||
+        item.ledgerId ||
+        `local_${Date.now()}`
+      );
       const tenantId = item.tenantId || null;
 
       const { error } = await client
@@ -71,12 +110,13 @@ async function startServer() {
         }, { onConflict: 'id' });
 
       if (error) {
-        console.error(`Supabase Upsert Error for ${table}:`, error);
+        console.error(`[Database] Upsert Error for ${table}:`, error);
         return res.status(500).json({ error: error.message });
       }
 
-      res.json({ success: true });
+      res.json({ success: true, id });
     } catch (err: any) {
+      console.error("[Database] Upsert Exception:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -96,13 +136,14 @@ async function startServer() {
         .eq("table_name", table);
 
       if (error) {
-        console.error(`Supabase Get Error for ${table}:`, error);
+        console.error(`[Database] Get Error for ${table}:`, error);
         return res.status(500).json({ error: error.message });
       }
 
       const items = (data || []).map((row: any) => row.data);
       res.json(items);
     } catch (err: any) {
+      console.error("[Database] Get Exception:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -123,12 +164,13 @@ async function startServer() {
         .eq("table_name", table);
 
       if (error) {
-        console.error(`Supabase Delete Error for ${table}:`, error);
+        console.error(`[Database] Delete Error for ${table}:`, error);
         return res.status(500).json({ error: error.message });
       }
 
       res.json({ success: true });
     } catch (err: any) {
+      console.error("[Database] Delete Exception:", err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -148,17 +190,20 @@ async function startServer() {
         .eq("table_name", table);
 
       if (error) {
-        console.error(`Supabase Clear Error for ${table}:`, error);
+        console.error(`[Database] Clear Error for ${table}:`, error);
         return res.status(500).json({ error: error.message });
       }
 
       res.json({ success: true });
     } catch (err: any) {
+      console.error("[Database] Clear Exception:", err);
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Business Onboarding with Brevo transactional welcome and confirmation mailers
+  // ============================================
+  // BUSINESS ONBOARDING WITH EMAIL INTEGRATION
+  // ============================================
   app.post("/api/register-onboarding", async (req, res) => {
     try {
       const { business, settings, owner, password } = req.body;
@@ -219,8 +264,8 @@ async function startServer() {
               </div>
               <hr style="border: 0; border-top: 1px solid #f4f4f5; margin-bottom: 24px;" />
               <p style="font-size: 15px; line-height: 1.5;">Dear <strong>${owner.username}</strong>,</p>
-              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Welcome to <strong>BuzzNa D74 Cloud OS</strong>! We are absolutely thrilled to partner with you to power and streamline operations at <strong>${business.legalName}</strong>.</p>
-              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Your 14-day premium enterprise trial has been successfully provisioned. You now have full administrative access to our real-time offline-first POS terminal, smart stock indicators, detailed digital receipts, customer debt ledger tracking, and AI-powered forecasting tools.</p>
+              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Welcome to <strong>BuzzNa D74 Cloud OS</strong>! We are absolutely thrilled to partner with you to power and streamline your retail and operational excellence across all venues and branches.</p>
+              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">Your 14-day premium enterprise trial has been successfully provisioned. You now have full administrative access to our unified retail ERP, offline-first POS terminal, and real-time business analytics dashboard.</p>
               
               <div style="background-color: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 12px; padding: 18px; margin: 24px 0;">
                 <h3 style="color: #5b21b6; margin: 0 0 8px 0; font-size: 13px; text-transform: uppercase; font-weight: 700;">Next Steps to Launch:</h3>
@@ -261,7 +306,7 @@ async function startServer() {
               </div>
               <hr style="border: 0; border-top: 1px solid #f4f4f5; margin-bottom: 24px;" />
               <p style="font-size: 15px; line-height: 1.5;">Hello <strong>${owner.username}</strong>,</p>
-              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">This email confirms that your business entity registration on BuzzNa D74 is fully processed and secured in our cloud storage databases. Below is a summary of your configuration and operator credentials:</p>
+              <p style="font-size: 14px; line-height: 1.5; color: #3f3f46;">This email confirms that your business entity registration on BuzzNa D74 is fully processed and secured in our cloud storage.</p>
               
               <table style="width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 13px;">
                 <thead>
@@ -323,34 +368,35 @@ async function startServer() {
             })
           });
 
-          console.log(`Onboarding welcome & confirmation emails successfully dispatched to ${owner.emailAddress}`);
+          console.log(`[Email] Onboarding emails dispatched to ${owner.emailAddress}`);
         } catch (emailErr) {
-          console.error("Brevo Onboarding Email Dispatch Error:", emailErr);
+          console.error("[Email] Brevo dispatch error:", emailErr);
         }
       } else {
-        console.warn("Brevo API integration skipped: BREVO_API_KEY or owner email address missing.");
+        console.warn("[Email] Brevo integration skipped: API key or email missing.");
       }
 
       res.json({ success: true, tenantId: business.tenantId });
     } catch (err: any) {
-      console.error("Critical Onboarding Endpoint Failure:", err);
+      console.error("[Onboarding] Critical failure:", err);
       res.status(500).json({ error: err.message || "Onboarding failed" });
     }
   });
 
-  // Paystack Billing Endpoints
+  // ============================================
+  // PAYSTACK BILLING INTEGRATION
+  // ============================================
   app.post("/api/billing/paystack/initialize", async (req, res) => {
     try {
       const { email, amount, callbackUrl, tenantId } = req.body;
 
       if (!email || !amount) {
-        return res.status(400).json({ error: "Email and amount are required to initialize Paystack transaction." });
+        return res.status(400).json({ error: "Email and amount are required." });
       }
 
       const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
       if (!paystackSecret) {
-        // Safe mode fallback for demo/testing when keys are not configured in user secrets
-        console.warn("PAYSTACK_SECRET_KEY is missing. Providing a high-contrast mock transaction link.");
+        console.warn("[Paystack] Secret key not configured. Using mock transaction.");
         const mockReference = `ref_mock_${Date.now()}`;
         return res.json({
           success: true,
@@ -361,8 +407,6 @@ async function startServer() {
       }
 
       const reference = `ref_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-
-      // Paystack accepts amount in standard minor units (kobo/cents). For KES/NGN, multiply KES amount by 100
       const paystackAmount = Math.round(Number(amount) * 100);
 
       const response = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -374,7 +418,7 @@ async function startServer() {
         body: JSON.stringify({
           email,
           amount: paystackAmount,
-          currency: "KES", // BuzzNa D74 standard operational currency is KES (Kenya)
+          currency: "KES",
           callback_url: callbackUrl,
           reference,
           metadata: {
@@ -391,7 +435,7 @@ async function startServer() {
 
       const data: any = await response.json();
       if (!response.ok || !data.status) {
-        throw new Error(data.message || "Failed to contact Paystack billing server.");
+        throw new Error(data.message || "Paystack initialization failed.");
       }
 
       res.json({
@@ -400,8 +444,8 @@ async function startServer() {
         reference: data.data.reference
       });
     } catch (err: any) {
-      console.error("Paystack Initialize Error:", err);
-      res.status(500).json({ error: err.message || "On-demand subscription billing handshaking failed." });
+      console.error("[Paystack] Initialize error:", err);
+      res.status(500).json({ error: err.message || "Billing initialization failed." });
     }
   });
 
@@ -413,7 +457,7 @@ async function startServer() {
         return res.status(400).json({ error: "Reference parameter is required." });
       }
 
-      // Safe mode fallback for demo testing
+      // Mock verification for demo transactions
       if (reference.startsWith("ref_mock_")) {
         return res.json({
           success: true,
@@ -427,7 +471,7 @@ async function startServer() {
 
       const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
       if (!paystackSecret) {
-        return res.status(500).json({ error: "Paystack secret credentials are not configured on Cloud OS." });
+        return res.status(500).json({ error: "Paystack secret not configured." });
       }
 
       const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
@@ -440,14 +484,14 @@ async function startServer() {
 
       const data: any = await response.json();
       if (!response.ok || !data.status) {
-        throw new Error(data.message || "Failed to verify transaction signature with Paystack.");
+        throw new Error(data.message || "Paystack verification failed.");
       }
 
       if (data.data.status === "success") {
         res.json({
           success: true,
           reference,
-          amount: data.data.amount / 100, // convert minor units back to major units
+          amount: data.data.amount / 100,
           currency: data.data.currency,
           status: data.data.status
         });
@@ -459,12 +503,14 @@ async function startServer() {
         });
       }
     } catch (err: any) {
-      console.error("Paystack Verification Error:", err);
-      res.status(500).json({ error: err.message || "Could not complete licensing transaction verification." });
+      console.error("[Paystack] Verify error:", err);
+      res.status(500).json({ error: err.message || "Payment verification failed." });
     }
   });
 
-  // Server-side Gemini API initialization
+  // ============================================
+  // GEMINI AI FORECASTING
+  // ============================================
   const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
     httpOptions: {
@@ -474,14 +520,16 @@ async function startServer() {
     }
   });
 
-  // Server-Side API endpoint for stock optimization & forecasts
   app.post("/api/gemini/forecast", async (req, res) => {
     try {
       const { products, sales, industry } = req.body;
 
       if (!products || !Array.isArray(products)) {
-        res.status(400).json({ error: "Products array is required." });
-        return;
+        return res.status(400).json({ error: "Products array is required." });
+      }
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(503).json({ error: "Gemini API not configured. AI forecasting unavailable." });
       }
 
       const productsContext = products.map((p: any) => 
@@ -511,18 +559,20 @@ async function startServer() {
       `;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-1.5-flash",
         contents: prompt,
       });
 
       res.json({ forecast: response.text });
     } catch (err: any) {
-      console.error("Gemini Forecast Server Error:", err);
-      res.status(500).json({ error: err.message || "Failed to generate AI insights." });
+      console.error("[Gemini] Forecast error:", err);
+      res.status(500).json({ error: err.message || "AI forecasting failed." });
     }
   });
 
-  // Standalone Offline License Key Generator HTML Page Route
+  // ============================================
+  // STATIC FILES & ACTIVATION GENERATOR
+  // ============================================
   app.get("/activation-generator.html", (req, res) => {
     res.sendFile(path.join(process.cwd(), "offline_activation_generator.html"));
   });
@@ -531,7 +581,9 @@ async function startServer() {
     res.sendFile(path.join(process.cwd(), "offline_activation_generator.html"));
   });
 
-  // Vite integration middleware
+  // ============================================
+  // VITE INTEGRATION
+  // ============================================
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -547,7 +599,9 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`\n🚀 [BuzzNa D74 Server] Running on http://0.0.0.0:${PORT}`);
+    console.log(`📊 NODE_ENV: ${process.env.NODE_ENV || "development"}`);
+    console.log(`🔒 Supabase: ${supabaseUrl ? "✅" : "❌"}\n`);
   });
 }
 
