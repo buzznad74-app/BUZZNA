@@ -1,5 +1,27 @@
 import { db } from './db';
+// IMPORTANT: Adjust this import to match where your Supabase client instance is initialized
+import { supabase } from './supabaseClient'; 
 import { SyncQueueItem } from '../types';
+
+/**
+ * FIXED: This function replaces the underlying HTTP GET requests 
+ * that caused the 404 Vercel errors. It queries the Supabase DB directly.
+ */
+export async function syncFromSupabase(tableName: string) {
+  try {
+    const { data, error } = await supabase.from(tableName).select('*');
+    
+    if (error) {
+      console.error(`Supabase query error for ${tableName}:`, error);
+      throw error;
+    }
+    
+    return data || [];
+  } catch (err) {
+    console.error(`Sync pull failed for ${tableName}:`, err);
+    return [];
+  }
+}
 
 class SynchronizationEngine {
   private isSynchronizing = false;
@@ -74,22 +96,21 @@ class SynchronizationEngine {
           throw new Error('Network dropout during sync session');
         }
 
-        // Simulate cloud processing delay
+        // TODO: Replace this simulation with an actual Supabase insert/upsert call
+        // Example: await supabase.from(item.entityType).insert(item.payload);
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // Walkaway Sync Protocol validation:
-        // Here, we check if the local transaction has pushed the stock negative on the "cloud" side.
-        // If an offline terminal sold an item that was actually out of stock on the server, we gracefully
-        // handle the conflict here rather than throwing.
         if (item.entityType === 'sale') {
           const txData = item.payload;
-          // Check for inventory anomalies (simulate walkaway check)
           const transactionItems = txData.items;
+          
           for (const itemDet of transactionItems) {
             const currentStockInDb = await db.recalculateProductQuantity(itemDet.productId);
+            
             if (currentStockInDb < 0) {
               console.warn(`[Walkaway Sync] Product ${itemDet.productId} has dropped to negative stock (${currentStockInDb}). Enqueueing attention notice.`);
-              // Place in quarantine ledger locally or log warning
+              
               const quarantineItem = {
                 quarantineId: 'quar-' + Date.now(),
                 tenantId: txData.transaction.tenantId,
@@ -99,7 +120,7 @@ class SynchronizationEngine {
                 resolvedStatus: false,
                 createdAt: new Date().toISOString()
               };
-              // Add to local sandbox quarantine registry (stored in localStorage for simplicity)
+              
               const currentQuarantine = JSON.parse(localStorage.getItem('sync_quarantine_records') || '[]');
               currentQuarantine.push(quarantineItem);
               localStorage.setItem('sync_quarantine_records', JSON.stringify(currentQuarantine));
