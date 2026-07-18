@@ -2,5 +2,4 @@
   "name": "BuzzNa D74 Enterprise OS",
   "description": "An offline-first, mobile-responsive intelligent business operating system for East African SMEs, featuring Zero-Attendance POS, event-sourced inventory, credit control, and direct Daraja M-Pesa routing.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
