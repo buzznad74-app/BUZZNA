@@ -2,44 +2,18 @@ import { db } from './db';
 import { SyncQueueItem } from '../types';
 import { createClient } from '@supabase/supabase-js';
 
-// Clean initialization using Vite environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-/** 
- * FIXED: This function replaces the underlying HTTP GET requests 
- * that caused the 404 Vercel errors. It queries the Supabase DB directly.
- */
-export async function syncFromSupabase(tableName: string) {
-  try {
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase credentials missing. Check Vercel Environment Variables.');
-    }
-
-    const { data, error } = await supabase.from(tableName).select('*');
-    
-    if (error) {
-      console.error(`Supabase query error for ${tableName}:`, error);
-      throw error;
-    }
-    
-    return data || [];
-  } catch (err) {
-    console.error(`Sync pull failed for ${tableName}:`, err);
-    return [];
-  }
-}
-
 class SynchronizationEngine {
   private isSynchronizing = false;
-  private networkOnline = true; // Reactive network state
+  private networkOnline = true;
   private listeners: Set<(online: boolean, syncing: boolean) => void> = new Set();
 
   constructor() {
     this.detectNativeConnection();
-    // Start automated tick check for syncing (every 10 seconds)
     setInterval(() => this.triggerAutoSync(), 10000);
   }
 
@@ -67,7 +41,6 @@ class SynchronizationEngine {
 
   public subscribe(listener: (online: boolean, syncing: boolean) => void): () => void {
     this.listeners.add(listener);
-    // Emit initial
     listener(this.networkOnline, this.isSynchronizing);
     return () => {
       this.listeners.delete(listener);
@@ -78,16 +51,13 @@ class SynchronizationEngine {
     this.listeners.forEach(listener => listener(this.networkOnline, this.isSynchronizing));
   }
 
-  // Auto Tick syncing
   private async triggerAutoSync() {
     if (!this.networkOnline || this.isSynchronizing) return;
     const queue = await db.getAll<SyncQueueItem>('sync_queue');
     if (queue.length === 0) return;
-
     this.forceSync();
   }
 
-  // Master Synchronizer Batch Pipeline (Idempotent and fault tolerant)
   public async forceSync(): Promise<{ successCount: number; failedCount: number }> {
     if (this.isSynchronizing) return { successCount: 0, failedCount: 0 };
     
@@ -98,56 +68,29 @@ class SynchronizationEngine {
     let successCount = 0;
     let failedCount = 0;
 
-    // Process queue records sequentially
     for (const item of queue) {
       try {
         if (!this.networkOnline) {
-          throw new Error('Network dropout during sync session');
+          throw new Error('Network offline');
         }
 
-        // Processing latency simulation
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await fetch('/api/sync/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
 
-        // Walkaway Sync Protocol validation:
-        if (item.entityType === 'sale') {
-          const txData = item.payload;
-          const transactionItems = txData.items;
-          
-          for (const itemDet of transactionItems) {
-            const currentStockInDb = await db.recalculateProductQuantity(itemDet.productId);
-            
-            if (currentStockInDb < 0) {
-              console.warn(`[Walkaway Sync] Product ${itemDet.productId} has dropped to negative stock (${currentStockInDb}). Enqueueing attention notice.`);
-              
-              const quarantineItem = {
-                quarantineId: 'quar-' + Date.now(),
-                tenantId: txData.transaction.tenantId,
-                entityType: 'sale_negative_stock',
-                rawPayload: itemDet,
-                anomalyReason: `Walkaway Sync Conflict: Stock dropped to ${currentStockInDb} due to offline terminal sales matching. Recompiling stock views.`,
-                resolvedStatus: false,
-                createdAt: new Date().toISOString()
-              };
-              
-              const currentQuarantine = JSON.parse(localStorage.getItem('sync_quarantine_records') || '[]');
-              currentQuarantine.push(quarantineItem);
-              localStorage.setItem('sync_quarantine_records', JSON.stringify(currentQuarantine));
-            }
-          }
-        }
-
-        // Successfully synced to "cloud". Remove from queue.
         await db.delete('sync_queue', item.queueId);
         successCount++;
       } catch (err) {
-        console.error(`Sync failure for item ${item.queueId}:`, err);
         failedCount++;
-        if (!this.networkOnline) break;
+        console.warn(`Sync failed for ${item.queueId}:`, err);
       }
     }
 
     this.isSynchronizing = false;
     this.notifyListeners();
+
     return { successCount, failedCount };
   }
 }

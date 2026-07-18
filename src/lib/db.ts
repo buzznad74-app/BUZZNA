@@ -20,7 +20,6 @@ import {
 } from '../types';
 import { supabase } from './sync';
 
-// Helper to generate UUIDs
 export function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = (Math.random() * 16) | 0,
@@ -50,8 +49,6 @@ class AppDatabase {
 
       request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
-        // Create object stores if they don't exist
         const stores = [
           'businesses',
           'business_settings',
@@ -71,7 +68,11 @@ class AppDatabase {
 
         stores.forEach(store => {
           if (!db.objectStoreNames.contains(store)) {
-            db.createObjectStore(store, { keyPath: this.getKeyPath(store) });
+            const os = db.createObjectStore(store, { keyPath: this.getKeyPath(store) });
+            // Add indexes for common queries
+            if (store === 'products') os.createIndex('tenantId', 'tenantId');
+            if (store === 'sales_transactions') os.createIndex('tenantId', 'tenantId');
+            if (store === 'customers') os.createIndex('tenantId', 'tenantId');
           }
         });
       };
@@ -110,7 +111,6 @@ class AppDatabase {
     }
   }
 
-  // Reactive Subscription
   public subscribe(listener: () => void): () => void {
     this.changeListeners.add(listener);
     return () => {
@@ -128,7 +128,6 @@ class AppDatabase {
     });
   }
 
-  // Generic DB Operations wrapped in Promises
   private getStore(name: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
     return this.initDatabase().then(db => {
       const transaction = db.transaction(name, mode);
@@ -164,7 +163,6 @@ class AppDatabase {
 
     this.notifyListeners();
 
-    // Background push to Supabase via direct client (no server proxy)
     if (storeName !== 'sync_queue') {
       try {
         const itemAny = item as any;
@@ -210,7 +208,6 @@ class AppDatabase {
 
     this.notifyListeners();
 
-    // Background deletion in Supabase via direct client (no server proxy)
     if (storeName !== 'sync_queue') {
       try {
         supabase
@@ -234,22 +231,8 @@ class AppDatabase {
     });
 
     this.notifyListeners();
-
-    // Background clear in Supabase via direct client (no server proxy)
-    if (storeName !== 'sync_queue') {
-      try {
-        supabase
-          .from('buzzna_records')
-          .delete()
-          .eq('table_name', storeName)
-          .catch(err => console.warn(`Supabase clear sync failed for ${storeName}:`, err));
-      } catch (e) {
-        console.warn(e);
-      }
-    }
   }
 
-  // Background cloud database retrieval to keep IndexedDB completely up-to-date with Supabase
   public async syncFromSupabase(): Promise<void> {
     const syncStores = [
       'businesses',
@@ -283,14 +266,12 @@ class AppDatabase {
           if (Array.isArray(items) && items.length > 0) {
             const localStore = await this.getStore(store, 'readwrite');
             
-            // Clear local IndexedDB store to prevent outdated/stale copies
             await new Promise<void>((res, rej) => {
               const req = localStore.clear();
               req.onsuccess = () => res();
               req.onerror = () => rej(req.error);
             });
 
-            // Write all fresh Cloud master records
             for (const item of items) {
               await new Promise<void>((res, rej) => {
                 const req = localStore.put(item);
@@ -304,21 +285,16 @@ class AppDatabase {
         }
       }
       this.notifyListeners();
-      console.log('Successfully completed background cloud sync from Supabase.');
+      console.log('Sync complete');
     } catch (err) {
-      console.warn("Supabase background cloud sync is paused or offline:", err);
+      console.warn('Sync failed:', err);
     }
   }
 
-  // Seeding completely disabled to guarantee brand-new clean production-ready databases
   private async seedInitialData(): Promise<void> {
-    // No-op for production readiness
     return;
   }
 
-  // --- Domain Logic Methods (Event Sourcing & Integrity Guards) ---
-
-  // Re-calculate quantities based on append-only events
   public async recalculateProductQuantity(productId: string): Promise<number> {
     const events = await this.getAll<InventoryEvent>('inventory_events');
     const productEvents = events.filter(e => e.productId === productId);
@@ -326,14 +302,13 @@ class AppDatabase {
     return sum;
   }
 
-  // Add Product Category with Unique Guard
   public async addCategory(tenantId: string, categoryName: string): Promise<Category> {
     const categories = await this.getAll<Category>('product_categories');
     const duplicate = categories.find(
       c => c.tenantId === tenantId && c.categoryName.toLowerCase().trim() === categoryName.toLowerCase().trim()
     );
     if (duplicate) {
-      throw new Error(`Category "${categoryName}" already exists for this business.`);
+      throw new Error(`Category "${categoryName}" already exists.`);
     }
 
     const categoryId = generateUUID();
@@ -342,10 +317,9 @@ class AppDatabase {
     return newCategory;
   }
 
-  // Add Product with cost guard
   public async addProduct(product: Omit<Product, 'currentQuantity'>, initialQuantity: number = 0): Promise<Product> {
     if (product.retailPrice < product.costFloor) {
-      throw new Error(`Integrity Error: Retail Price (KES ${product.retailPrice}) cannot be below Cost Price (KES ${product.costFloor}).`);
+      throw new Error(`Retail Price (KES ${product.retailPrice}) cannot be below Cost Price (KES ${product.costFloor}).`);
     }
 
     const fullProduct: Product = {
@@ -355,7 +329,6 @@ class AppDatabase {
 
     await this.put('products', fullProduct);
 
-    // Automatically create initial STOCK_ADD event if currentQuantity > 0
     if (fullProduct.currentQuantity > 0) {
       const activeUser = localStorage.getItem('active_user_id') || 'demo-owner-id';
       const eventId = generateUUID();
@@ -376,11 +349,9 @@ class AppDatabase {
     return fullProduct;
   }
 
-  // Record custom inventory event
   public async recordInventoryEvent(event: InventoryEvent): Promise<void> {
     await this.put('inventory_events', event);
     
-    // Update product quantity projection
     const product = await this.getById<Product>('products', event.productId);
     if (product) {
       const newQty = product.currentQuantity + event.quantityDelta;
@@ -389,32 +360,27 @@ class AppDatabase {
     }
   }
 
-  // Register complete Sale Checkout transaction
   public async executeSaleCheckout(
     transaction: SalesTransaction,
     items: Omit<SaleItem, 'itemId' | 'transactionId'>[],
     splitAllocations: Omit<PaymentAllocation, 'allocationId' | 'transactionId'>[] = []
   ): Promise<void> {
-    // 1. Double check shift session status
     const session = await this.getById<TillSession>('till_sessions', transaction.sessionId);
     if (!session || session.sessionStatus === 'CLOSED') {
-      throw new Error('Transaction Rejected: Shift session is closed or missing. Open till to continue.');
+      throw new Error('Shift session is closed or missing.');
     }
 
-    // 2. Validate cost floors on items (prevent bargain below margins)
     for (const item of items) {
       const product = await this.getById<Product>('products', item.productId);
       if (product) {
         if (item.unitPrice < product.costFloor) {
-          throw new Error(`Checkout Blocked: Bargain price KES ${item.unitPrice} on "${product.productName}" is below cost price (KES ${product.costFloor}).`);
+          throw new Error(`Bargain price KES ${item.unitPrice} on "${product.productName}" is below cost price (KES ${product.costFloor}).`);
         }
       }
     }
 
-    // 3. Save Sales Transaction record
     await this.put('sales_transactions', transaction);
 
-    // 4. Save Sales items & append dispatch event-sourced records
     const activeUser = localStorage.getItem('active_user_id') || 'demo-owner-id';
     for (const item of items) {
       const itemId = generateUUID();
@@ -425,7 +391,6 @@ class AppDatabase {
       };
       await this.put('sale_items', saleItem);
 
-      // Append stock subtraction event (SALE_DISPATCH)
       const eventId = generateUUID();
       const invEvent: InventoryEvent = {
         eventId,
@@ -433,7 +398,7 @@ class AppDatabase {
         productId: item.productId,
         userId: activeUser,
         eventType: InventoryEventType.SALE_DISPATCH,
-        quantityDelta: -item.quantity, // Negative delta
+        quantityDelta: -item.quantity,
         reasonCode: 'POS_CHECKOUT_DISPATCH',
         terminalTimestamp: transaction.terminalTimestamp,
         createdAt: new Date().toISOString()
@@ -441,7 +406,6 @@ class AppDatabase {
       await this.recordInventoryEvent(invEvent);
     }
 
-    // 5. Save payment allocations if split
     if (transaction.paymentMethod === PaymentMethod.SPLIT) {
       for (const allocation of splitAllocations) {
         const allocationId = generateUUID();
@@ -452,7 +416,6 @@ class AppDatabase {
         };
         await this.put('payment_allocations', pAlloc);
 
-        // If split involves debt allocation, update customer ledger
         if (allocation.allocatedMethod === PaymentMethod.DEBT && transaction.customerId) {
           await this.adjustCustomerDebt(
             transaction.tenantId,
@@ -463,7 +426,6 @@ class AppDatabase {
         }
       }
     } else if (transaction.paymentMethod === PaymentMethod.DEBT && transaction.customerId) {
-      // Full debt transaction
       await this.adjustCustomerDebt(
         transaction.tenantId,
         transaction.customerId,
@@ -472,7 +434,6 @@ class AppDatabase {
       );
     }
 
-    // 6. Automatically increment expected cash balance if Cash is utilized
     if (transaction.paymentMethod === PaymentMethod.CASH) {
       session.expectedCashBalance += transaction.grossTotal;
       await this.put('till_sessions', session);
@@ -484,17 +445,14 @@ class AppDatabase {
       }
     }
 
-    // 7. Put into sync queue
     await this.enqueueSync('sale', { transaction, items, splitAllocations });
   }
 
-  // Refund Sale & Restore stock (Anti-Fraud Gate)
   public async executeRefund(transactionId: string): Promise<void> {
     const tx = await this.getById<SalesTransaction>('sales_transactions', transactionId);
-    if (!tx) throw new Error('Transaction record not found.');
-    if (tx.paymentStatus === 'REFUNDED') throw new Error('Transaction has already been fully refunded.');
+    if (!tx) throw new Error('Transaction not found.');
+    if (tx.paymentStatus === 'REFUNDED') throw new Error('Transaction already refunded.');
 
-    // Isolate products, restock delta & update ledger
     tx.paymentStatus = 'REFUNDED';
     await this.put('sales_transactions', tx);
 
@@ -504,7 +462,6 @@ class AppDatabase {
     const activeUser = localStorage.getItem('active_user_id') || 'demo-owner-id';
 
     for (const item of txItems) {
-      // Create compensating positive inventory event (REFUND_RETURN)
       const eventId = generateUUID();
       const invEvent: InventoryEvent = {
         eventId,
@@ -512,7 +469,7 @@ class AppDatabase {
         productId: item.productId,
         userId: activeUser,
         eventType: InventoryEventType.REFUND_RETURN,
-        quantityDelta: item.quantity, // Positive restoration delta
+        quantityDelta: item.quantity,
         reasonCode: 'CUSTOMER_REFUND_RETURN',
         terminalTimestamp: new Date().toISOString(),
         createdAt: new Date().toISOString()
@@ -520,7 +477,6 @@ class AppDatabase {
       await this.recordInventoryEvent(invEvent);
     }
 
-    // Adjust customer debt if the sale was on debt
     if (tx.paymentMethod === PaymentMethod.DEBT && tx.customerId) {
       await this.adjustCustomerDebt(tx.tenantId, tx.customerId, -tx.grossTotal, tx.transactionId);
     } else if (tx.paymentMethod === PaymentMethod.SPLIT && tx.customerId) {
@@ -532,16 +488,13 @@ class AppDatabase {
       }
     }
 
-    // Queue sync
     await this.enqueueSync('inventory_event', { refundTxId: transactionId });
   }
 
-  // Void alias for Sales log compatibility
   public async voidSalesTransaction(transactionId: string): Promise<void> {
     return this.executeRefund(transactionId);
   }
 
-  // Customer Debt Controller
   public async adjustCustomerDebt(
     tenantId: string,
     customerId: string,
@@ -554,15 +507,13 @@ class AppDatabase {
     const currentDebt = customer.existingDebt;
     const nextDebt = currentDebt + delta;
 
-    // Credit limit ceiling validation
     if (delta > 0 && nextDebt > customer.creditLimit) {
-      throw new Error(`Credit Limit Breached: Customer "${customer.customerName}" has a credit limit of KES ${customer.creditLimit}. Outstanding debt is KES ${customer.existingDebt}. Cannot add KES ${delta}.`);
+      throw new Error(`Credit Limit Exceeded: Customer has limit of KES ${customer.creditLimit}. Current debt: KES ${customer.existingDebt}.`);
     }
 
     customer.existingDebt = Math.max(0, nextDebt);
     await this.put('customers', customer);
 
-    // Save credit ledger entry
     const ledgerId = generateUUID();
     const ledgerEntry: CustomerCreditLedgerEntry = {
       ledgerId,
@@ -575,11 +526,9 @@ class AppDatabase {
     };
     await this.put('customer_credit_ledger', ledgerEntry);
     
-    // Enqueue Sync
     await this.enqueueSync('customer_credit', ledgerEntry);
   }
 
-  // --- Synchronization Queue Logic ---
   public async enqueueSync(entityType: SyncQueueItem['entityType'], payload: any): Promise<void> {
     const queueId = generateUUID();
     const syncItem: SyncQueueItem = {
