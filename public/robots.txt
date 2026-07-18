@@ -9,3 +9,4 @@ Disallow: /private/
 
 # Sitemap Link
 Sitemap: https://buzznad74.vercel.app/sitemap.xml
+ 
