@@ -307,6 +307,64 @@ ALTER TABLE customer_credit_ledger ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE buzzna_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_queue ENABLE ROW LEVEL SECURITY;
+-- ============================================
+-- ROW LEVEL SECURITY POLICIES
+-- ============================================
+
+-- Allow businesses to be inserted (for registration)
+CREATE POLICY "Allow insert businesses" ON businesses
+  FOR INSERT WITH CHECK (true);
+
+-- Allow users to read their own business
+CREATE POLICY "Users can read own business" ON businesses
+  FOR SELECT USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+-- Allow business updates by owner
+CREATE POLICY "Allow update own business" ON businesses
+  FOR UPDATE USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
+
+-- Similar policies for other tables
+CREATE POLICY "Allow all users" ON business_settings
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON users
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON product_categories
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON products
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON inventory_events
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON till_sessions
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON sales_transactions
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON sale_items
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON payment_allocations
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON customers
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON customer_credit_ledger
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON expenses
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON buzzna_records
+  FOR ALL USING (true);
+
+CREATE POLICY "Allow all users" ON sync_queue
+  FOR ALL USING (true);
 
 -- ============================================
 -- VIEWS (Business Intelligence)
