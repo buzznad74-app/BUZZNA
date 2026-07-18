@@ -350,11 +350,10 @@ SELECT
   c.existing_debt,
   c.credit_limit,
   MAX(ccl.created_at) as last_transaction_date,
-  EXTRACT(DAY FROM (CURRENT_DATE - MAX(ccl.created_at)::DATE)) as days_since_last_tx
+  CURRENT_DATE - COALESCE(MAX(ccl.created_at)::DATE, CURRENT_DATE) as days_since_last_tx
 FROM customers c
 LEFT JOIN customer_credit_ledger ccl ON c.customer_id = ccl.customer_id
 GROUP BY c.customer_id, c.tenant_id, c.customer_name, c.existing_debt, c.credit_limit;
-
 -- ============================================
 -- FUNCTIONS & TRIGGERS (Operational Logic)
 -- ============================================
