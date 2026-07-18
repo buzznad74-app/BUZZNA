@@ -8,4 +8,4 @@ Disallow: /admin/
 Disallow: /private/
 
 # Sitemap Link
-Sitemap: https://d74.buzzna.co.ke/sitemap.xml
+Sitemap: https://buzznad74.vercel.app/sitemap.xml
