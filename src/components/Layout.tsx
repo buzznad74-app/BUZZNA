@@ -261,7 +261,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTa
           <div className="flex bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700" id="lang-switcher">
             <button
               onClick={() => setLanguage('EN')}
-              className={`px-2 py-1.5 text-[10px] font-black rounded transition-all cursor-pointer ${{
+              className={`px-2 py-1.5 text-[10px] font-black rounded transition-all cursor-pointer ${
                 language === 'EN'
                   ? 'bg-white dark:bg-zinc-950 text-zinc-950 dark:text-white shadow-xs'
                   : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
