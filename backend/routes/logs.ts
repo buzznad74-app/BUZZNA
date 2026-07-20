@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 
 const router = Router();
 
-interface ErrorLogPayload {
+interface ErrorLogPayload { 
   timestamp: string;
   message: string;
   stack?: string;
