@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const preferredLang = localStorage.getItem('preferred_language');
         if (preferredLang === 'SW' || preferredLang === 'EN') {
-          setLanguageState(preferredLang);
+          setLanguageState(preferredLang as 'EN' | 'SW');
         } else if (bus.language === 'SW' || bus.language === 'kiswahili' || bus.language?.toUpperCase().includes('SW')) {
           setLanguageState('SW');
         } else {
@@ -157,7 +157,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     let theme: VerticalTheme = VerticalTheme.RETAIL;
-    let brandColor = 'indigo';
+    // Default to Blue placeholder branding as requested (#2563EB)
+    let brandColor = '#2563EB';
     const ind = details.industry.toLowerCase();
     
     if (ind.includes('butch') || ind.includes('meat')) {
@@ -238,6 +239,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       created_at: newOwner.createdAt
     }]);
     if (ownerError) throw new Error(ownerError.message || "Failed to initialize owner in Cloud.");
+
+    // Tell the server to run onboarding hooks (email, welcome messages, etc.)
+    // Preserve existing behaviour: don't fail local registration if server is down
+    try {
+      if (typeof window !== 'undefined') {
+        fetch('/api/register-onboarding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business: newBusiness, settings: newSettings, owner: newOwner, password: details.password })
+        }).then(async (r) => {
+          if (!r.ok) {
+            console.warn('[Onboarding] server onboarding call failed:', await r.text());
+          }
+        }).catch(err => {
+          console.warn('[Onboarding] Could not call server onboarding endpoint:', err);
+        });
+      }
+    } catch (e) {
+      console.warn('[Onboarding] server onboarding invocation skipped:', e);
+    }
 
     // Commit to local DB
     await db.put('businesses', newBusiness);
