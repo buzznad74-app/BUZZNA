@@ -5,7 +5,6 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
-import { emailQueue } from "./src/lib/email-queue";
 
 dotenv.config();
 
@@ -27,6 +26,8 @@ async function startServer() {
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     BREVO_API_KEY: process.env.BREVO_API_KEY,
+    BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL,
+    BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME,
     PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
   };
 
@@ -58,6 +59,38 @@ async function startServer() {
       }
     }
     return supabase;
+  }
+
+  // Helper: send email directly via Brevo from server context (synchronous server-side send)
+  async function sendEmailDirect(to: string, subject: string, htmlContent: string) {
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || "no-reply@buzzna.com";
+    const senderName = process.env.BREVO_SENDER_NAME || "BuzzNa D74";
+
+    if (!brevoApiKey) {
+      throw new Error('Email service not configured.');
+    }
+
+    const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': brevoApiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: to }],
+        subject,
+        htmlContent
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.message || 'Brevo send failed');
+    }
+    return data;
   }
 
   // ========== ONBOARDING ==========
@@ -99,16 +132,33 @@ async function startServer() {
         if (resOwn.error) throw new Error(resOwn.error.message);
       }
 
-      const brevoApiKey = process.env.BREVO_API_KEY;
-      const senderEmail = process.env.BREVO_SENDER_EMAIL || "no-reply@buzzna.com";
-      const senderName = process.env.BREVO_SENDER_NAME || "BuzzNa D74";
+      // Compose a lightweight branded HTML welcome message (Light Theme, Blue placeholder branding)
+      const welcomeHtml = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:#ffffff; color:#111827; padding:24px;">
+          <div style="max-width:680px;margin:0 auto;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
+            <div style="background:#ffffff;padding:20px 24px;">
+              <h1 style="margin:0;font-size:20px;color:#2563EB;">Welcome to BuzzNa D74</h1>
+              <p style="margin:8px 0 0 0;font-size:14px;color:#374151;">Hello ${owner.username},</p>
+              <p style="font-size:13px;color:#374151;line-height:1.4;">Your business <strong style="color:#111827;">${business.legalName}</strong> is now registered and ready. Get started by adding products, configuring tills, and inviting staff.</p>
+              <div style="margin-top:12px;padding:12px;border-radius:8px;background:#f8fafc;border:1px solid #e6eefc;color:#0f172a;font-size:13px;">
+                <strong>Tenant ID:</strong> ${String(business.tenantId)}
+              </div>
+              <p style="font-size:12px;color:#6b7280;margin-top:14px;">Need help? Reply to this email or visit the support center.</p>
+              <p style="font-size:12px;color:#6b7280;margin-top:4px;">Thanks,<br/>The BuzzNa Team</p>
+            </div>
+          </div>
+        </div>
+      `;
 
-      if (brevoApiKey && owner.emailAddress) {
-        await emailQueue.enqueue({
-          to: owner.emailAddress,
-          subject: `Welcome to BuzzNa D74 - ${business.legalName}!`,
-          htmlContent: `<div style="font-family: sans-serif; padding: 24px; color: #1c1917; max-width: 600px; margin: 0 auto;"><h1 style="color: #4f46e5;">Welcome ${owner.username}!</h1><p>Your business has been registered. Start by adding products and opening a till session.</p></div>`
-        });
+      // Send email server-side using Brevo API key (preferred). If this fails it will be logged but onboarding returns success.
+      if (process.env.BREVO_API_KEY && owner.emailAddress) {
+        try {
+          await sendEmailDirect(owner.emailAddress, `Welcome to BuzzNa D74 - ${business.legalName}!`, welcomeHtml);
+          console.log(`[Onboarding] Welcome email sent to ${owner.emailAddress}`);
+        } catch (emailErr) {
+          console.warn('[Onboarding] Failed to send welcome email directly:', emailErr);
+          // NOTE: we intentionally do not block successful onboarding if email fails
+        }
       }
 
       res.json({ success: true, tenantId: business.tenantId });
@@ -119,6 +169,7 @@ async function startServer() {
   });
 
   // ========== EMAIL SYSTEM ==========
+  // This endpoint remains for client-side queued sends / diagnostics; server-side direct sends are preferred.
   app.post("/api/emails/send", async (req, res) => {
     try {
       const { to, subject, htmlContent } = req.body;
@@ -139,7 +190,7 @@ async function startServer() {
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          sender: { name: "BuzzNa D74", email: "no-reply@buzzna.com" },
+          sender: { name: process.env.BREVO_SENDER_NAME || "BuzzNa D74", email: process.env.BREVO_SENDER_EMAIL || "no-reply@buzzna.com" },
           to: [{ email: to }],
           subject,
           htmlContent
@@ -313,6 +364,7 @@ async function startServer() {
     try {
       const item = req.body;
       console.log(`Processing sync item: ${item.queueId}`);
+      // Server can decide to persist or forward items to permanent store here.
       res.json({ success: true, processed: item.queueId });
     } catch (err: any) {
       console.error("[Sync] Error:", err);
@@ -321,10 +373,11 @@ async function startServer() {
   });
 
   // ========== STAFF MANAGEMENT ==========
+  // NOTE: For production, add auth middleware and RBAC checks (Owner only) before creating staff.
   app.post("/api/staff/create", async (req, res) => {
     try {
-      const { username, phoneNumber, role, tenantId } = req.body;
-      if (!username || !phoneNumber || !role) {
+      const { username, phoneNumber, role, tenantId, email } = req.body;
+      if (!username || !phoneNumber || !role || !tenantId) {
         return res.status(400).json({ error: "Missing required fields." });
       }
 
@@ -343,6 +396,22 @@ async function startServer() {
       }]);
 
       if (error) throw new Error(error.message);
+
+      // Optional automatic invite email for new staff (server-side)
+      if (process.env.BREVO_API_KEY && email) {
+        const inviteHtml = `
+          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto; padding:16px; background:#fff; color:#111827;">
+            <h2 style="color:#2563EB;margin:0 0 8px 0;">You were invited to BuzzNa</h2>
+            <p style="margin:0;font-size:13px;color:#374151;">Hello ${username}, you were added as <strong>${role}</strong>. Log in to the terminal with the assigned PIN.</p>
+          </div>
+        `;
+        try {
+          await sendEmailDirect(email, `You've been invited to ${tenantId} on BuzzNa`, inviteHtml);
+        } catch (mailErr) {
+          console.warn('[Staff] Invite email failed:', mailErr);
+        }
+      }
+
       res.json({ success: true, userId });
     } catch (err: any) {
       console.error("[Staff] Error:", err);
